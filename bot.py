@@ -1,70 +1,92 @@
-import logging
+import os
 from aiogram import Bot, Dispatcher, executor, types
-from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
+import logging
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# ========== Telegram Bot ==========
-
-API_TOKEN = 'ТВОЙ_ТОКЕН_ОТ_BOTFATHER'
-
+# ==== ЛОГИ ====
 logging.basicConfig(level=logging.INFO)
+
+# ==== НАСТРОЙКИ ====
+API_TOKEN = "8091593417:AAEKe5qIJLiLslk05Ssjk5tfUD-aCiDYKRE"
+if not API_TOKEN:
+    raise ValueError("❌ Переменная API_TOKEN не установлена!")
+
+print("TOKEN:", API_TOKEN)
+if not API_TOKEN:
+    raise ValueError("❌ API_TOKEN is not set!")
+
+print("TOKEN IS:", API_TOKEN)
+
+
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
-# ========== Google Sheets Setup ==========
+# ==== НАСТРОЙКИ GOOGLE SHEETS ====
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds_path = "/etc/secrets/credentials.json"  # путь для Render Secret File
 
-scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+if not os.path.exists(creds_path):
+    raise FileNotFoundError(f"❌ Файл {creds_path} не найден. Убедись, что он загружен в Secret Files!")
+
+creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
 client = gspread.authorize(creds)
 sheet = client.open("Анкета").sheet1
 
-# ========== States ==========
+# ==== СОСТОЯНИЯ ====
 class Form(StatesGroup):
     name = State()
     phone = State()
     birthdate = State()
     city = State()
 
-# ========== Handlers ==========
-
+# ==== СТАРТ ====
 @dp.message_handler(commands='start')
-async def start(message: types.Message):
-    await message.answer("Привет! Давай заполним форму. Как тебя зовут? (ФИО)")
+async def cmd_start(message: types.Message):
     await Form.name.set()
+    await message.reply("Привет! Давай начнём. Введи своё ФИО:")
 
+# ==== ОБРАБОТКА ФИО ====
 @dp.message_handler(state=Form.name)
-async def get_name(message: types.Message, state: FSMContext):
+async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
-    await message.answer("Теперь введи номер телефона:")
     await Form.phone.set()
+    await message.reply("Теперь введи номер телефона:")
 
+# ==== ОБРАБОТКА ТЕЛЕФОНА ====
 @dp.message_handler(state=Form.phone)
-async def get_phone(message: types.Message, state: FSMContext):
+async def process_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.text)
-    await message.answer("Дата рождения (например, 01.01.1990):")
     await Form.birthdate.set()
+    await message.reply("Укажи дату рождения (например: 01.01.1990):")
 
+# ==== ОБРАБОТКА ДАТЫ ====
 @dp.message_handler(state=Form.birthdate)
-async def get_birthdate(message: types.Message, state: FSMContext):
+async def process_birthdate(message: types.Message, state: FSMContext):
     await state.update_data(birthdate=message.text)
-    await message.answer("И наконец, твой город:")
     await Form.city.set()
+    await message.reply("И, наконец, город проживания:")
 
+# ==== ОБРАБОТКА ГОРОДА И ЗАПИСЬ ====
 @dp.message_handler(state=Form.city)
-async def get_city(message: types.Message, state: FSMContext):
+async def process_city(message: types.Message, state: FSMContext):
     await state.update_data(city=message.text)
     data = await state.get_data()
 
-    # Запись в Google Sheets
-    sheet.append_row([data['name'], data['phone'], data['birthdate'], data['city']])
-    
-    await message.answer("Спасибо! Данные отправлены в таблицу ✅")
+    # Пытаемся записать в таблицу
+    try:
+        sheet.append_row([data['name'], data['phone'], data['birthdate'], data['city']])
+        await message.reply("🎉 Спасибо! Данные успешно записаны в Google Sheets.")
+    except Exception as e:
+        await message.reply("⚠️ Произошла ошибка при записи в таблицу.")
+        logging.error(f"Ошибка при записи в Google Sheets: {e}")
+
     await state.finish()
 
-# ========== Запуск ==========
+# ==== ЗАПУСК ====
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
