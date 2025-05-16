@@ -33,8 +33,8 @@ sheet = client.open("Анкета").sheet1  # Название таблицы!
 # ==== СОСТОЯНИЯ ====
 class Form(StatesGroup):
     name = State()
-    phone = State()
     birthdate = State()
+    phone = State()
 
 # ==== СТАРТ ====
 @dp.message_handler(commands='start')
@@ -46,26 +46,26 @@ async def cmd_start(message: types.Message):
 @dp.message_handler(state=Form.name)
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
-    await Form.phone.set()
-    await message.reply("Введите номер телефона:")
-
-# ==== ТЕЛЕФОН ====
-@dp.message_handler(state=Form.phone)
-async def process_phone(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.text)
     await Form.birthdate.set()
     await message.reply("Укажите дату рождения (в формате: 01.01.1990):")
 
-# ==== ДАТА РОЖДЕНИЯ + ЗАПИСЬ ====
+# ==== ДАТА РОЖДЕНИЯ ====
 @dp.message_handler(state=Form.birthdate)
 async def process_birthdate(message: types.Message, state: FSMContext):
     await state.update_data(birthdate=message.text)
+    await Form.phone.set()
+    await message.reply("Введите номер телефона:")
+
+# ==== ТЕЛЕФОН + ЗАПИСЬ ====
+@dp.message_handler(state=Form.phone)
+async def process_phone(message: types.Message, state: FSMContext):
+    await state.update_data(phone=message.text)
     data = await state.get_data()
 
     try:
         sheet.append_row([data['name'], data['phone'], data['birthdate']])
         await message.reply(
-            "🎉 Отличная работа!\n\n Ваша бонусная карта будет создана в ближайшее время и активируется автоматически.\n📞 Просто назовите ваш номер телефона в любом салоне ХАМЕЛЕОН."
+            "🎉 Отличная работа!\n\n🪪 Ваша бонусная карта будет создана в ближайшее время и активируется автоматически.\n📞 Просто назовите ваш номер телефона в любом салоне ХАМЕЛЕОН."
         )
     except Exception as e:
         await message.reply("⚠️ Произошла ошибка при записи в таблицу.")
