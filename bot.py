@@ -28,7 +28,7 @@ if not os.path.exists(creds_path):
 
 creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
 client = gspread.authorize(creds)
-sheet = client.open("Анкета").sheet1  # Название таблицы!
+sheet = client.open("Анкета").sheet1
 
 # ==== СОСТОЯНИЯ ====
 class Form(StatesGroup):
@@ -36,26 +36,46 @@ class Form(StatesGroup):
     birthdate = State()
     phone = State()
 
+# ==== КНОПКИ МЕНЮ ====
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+main_menu = InlineKeyboardMarkup(row_width=1)
+main_menu.add(
+    InlineKeyboardButton("🪪 Оформить бонусную карту", callback_data="start_form"),
+    InlineKeyboardButton("📍 Салоны рядом", url="https://taplink.cc/vyberi_gorod"),
+    InlineKeyboardButton("👁 Заказать линзы", url="https://www.optica-chameleon.ru/catalog/lenses/?sort=hit"),
+    InlineKeyboardButton("🛍 Посмотреть каталог", url="https://www.optica-chameleon.ru/"),
+    InlineKeyboardButton("💬 Написать в WhatsApp", url="https://wtsp.cc/89841425515")
+)
+
 # ==== СТАРТ ====
-@dp.message_handler(commands='start')
+@dp.message_handler(commands='start', state="*")
 async def cmd_start(message: types.Message, state: FSMContext):
-    await state.finish()  # Очищаем все предыдущие состояния
+    await state.finish()
+    await message.answer(
+        "👋 Привет! Я бот сети оптик ХАМЕЛЕОН.\nЯ помогу тебе оформить бонусную карту и не только!\n\nВыбери нужное действие:",
+        reply_markup=main_menu
+    )
+
+# ==== ОБРАБОТКА КНОПКИ АНКЕТЫ ====
+@dp.callback_query_handler(lambda c: c.data == "start_form")
+async def process_start_button(callback_query: types.CallbackQuery):
     await Form.name.set()
-    await message.reply("👋 Привет! Я бот сети оптик ХАМЕЛЕОН и помогу тебе с оформлением бонусной карты.\nВведите ваше ФИО:")
+    await bot.send_message(callback_query.from_user.id, "✍️ Введите ваше ФИО (например: Иванов Иван Иванович):")
 
 # ==== ФИО ====
 @dp.message_handler(state=Form.name)
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await Form.birthdate.set()
-    await message.reply("Укажите дату рождения (в формате: 01.01.1990):")
+    await message.reply("📅 Укажите дату рождения (в формате: 01.01.1990):")
 
 # ==== ДАТА РОЖДЕНИЯ ====
 @dp.message_handler(state=Form.birthdate)
 async def process_birthdate(message: types.Message, state: FSMContext):
     await state.update_data(birthdate=message.text)
     await Form.phone.set()
-    await message.reply("Введите номер телефона:")
+    await message.reply("📞 Введите номер телефона (только цифры):")
 
 # ==== ТЕЛЕФОН + ЗАПИСЬ ====
 @dp.message_handler(state=Form.phone)
